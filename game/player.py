@@ -19,10 +19,26 @@ class Player:
 
         self.vel_y = min(self.vel_y + 0.55, 12)
         self.rect.x = max(0, min(width - self.rect.width, self.rect.x + dx))
+
+        # Store the player's bottom edge before vertical movement.
+        previous_bottom = self.rect.bottom
+
         self.rect.y += int(self.vel_y)
         self.on_ground = False
+
         for p in platforms:
-            if self.rect.colliderect(p) and self.vel_y > 0 and self.rect.bottom <= p.bottom + 10:
+            # One-way platform collision:
+            # - player must be descending
+            # - player's previous bottom must have been above the platform
+            # - player's current bottom must cross the platform's top
+            # - player must horizontally overlap the platform
+            if (
+                self.vel_y > 0
+                and previous_bottom <= p.top
+                and self.rect.bottom >= p.top
+                and self.rect.right > p.left
+                and self.rect.left < p.right
+            ):
                 self.rect.bottom = p.top
                 self.vel_y = 0
                 self.on_ground = True
@@ -30,4 +46,4 @@ class Player:
     def draw(self, screen, cam_y):
         dr = self.rect.move(0, -int(cam_y))
         pygame.draw.rect(screen, self.color, dr, border_radius=6)
-        pygame.draw.circle(screen,(255,220,180),(dr.centerx, dr.top+8),7)
+        pygame.draw.circle(screen, (255,220,180), (dr.centerx, dr.top+8), 7)
