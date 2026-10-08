@@ -11,17 +11,25 @@ FPS = 60
 BG = (20, 15, 30)
 GROUND_Y = HEIGHT + 200
 
-# Task 2 settings
+# Task 2
 CRUMBLE_FRAMES = 45
 FRAGILE_CHANCE = 0.30
+
+# Task 3
+SPRING_CHANCE = 0.20
 
 
 class GameEngine:
     def __init__(self):
         pygame.init()
 
-        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
-        pygame.display.set_caption("Lava Escape")
+        self.screen = pygame.display.set_mode(
+            (WIDTH, HEIGHT)
+        )
+
+        pygame.display.set_caption(
+            "Lava Escape"
+        )
 
         self.clock = pygame.time.Clock()
 
@@ -61,19 +69,33 @@ class GameEngine:
         self.top_y = self.platforms[-1].y
         self.frame = 0
 
-        # Ground platform remains permanent.
-        # Other platforms have a chance of being fragile.
+        # ------------------------------------------------
+        # TASK 2: Fragile platforms
+        # ------------------------------------------------
+
         self.fragile_platforms = {
             id(p)
             for p in self.platforms[1:]
             if random.random() < FRAGILE_CHANCE
         }
 
-        # None means the platform has not been stepped on yet.
         self.crumble_timers = {
             id(p): None
             for p in self.platforms
             if id(p) in self.fragile_platforms
+        }
+
+        # ------------------------------------------------
+        # TASK 3: Spring platforms
+        # ------------------------------------------------
+
+        self.spring_platforms = {
+            id(p)
+            for p in self.platforms[1:]
+            if (
+                id(p) not in self.fragile_platforms
+                and random.random() < SPRING_CHANCE
+            )
         }
 
     def handle_events(self):
@@ -96,15 +118,18 @@ class GameEngine:
 
         keys = pygame.key.get_pressed()
 
-        # Player reports which platform was landed on.
+        # Player returns the platform landed on.
         landed = self.player.update(
             keys,
             self.platforms,
-            WIDTH
+            WIDTH,
+            self.spring_platforms
         )
 
-        # Start the crumble countdown when the player first lands
-        # on a fragile platform.
+        # ------------------------------------------------
+        # TASK 2: Start crumbling after landing
+        # ------------------------------------------------
+
         if (
             landed is not None
             and id(landed) in self.fragile_platforms
@@ -112,12 +137,16 @@ class GameEngine:
             if self.crumble_timers[id(landed)] is None:
                 self.crumble_timers[id(landed)] = CRUMBLE_FRAMES
 
-        target = self.player.rect.centery - HEIGHT // 2
+        target = (
+            self.player.rect.centery
+            - HEIGHT // 2
+        )
 
         if target < self.cam_y:
             self.cam_y = target
 
         self.lava_y -= self.lava_rise
+
         self.lava_rise = min(
             1.2,
             self.lava_rise + 0.0003
@@ -128,28 +157,45 @@ class GameEngine:
             (GROUND_Y - self.player.rect.y) // 10
         )
 
-        # Count down active fragile platforms.
+        # ------------------------------------------------
+        # TASK 2: Crumbling countdown
+        # ------------------------------------------------
+
         removed = []
 
         for p in self.platforms:
 
-            timer = self.crumble_timers.get(id(p))
+            timer = self.crumble_timers.get(
+                id(p)
+            )
 
             if timer is not None:
 
                 timer -= 1
+
                 self.crumble_timers[id(p)] = timer
 
                 if timer <= 0:
                     removed.append(p)
 
-        # Remove platforms that have completely crumbled.
         for p in removed:
 
             self.platforms.remove(p)
 
-            self.fragile_platforms.discard(id(p))
-            self.crumble_timers.pop(id(p), None)
+            self.fragile_platforms.discard(
+                id(p)
+            )
+
+            self.crumble_timers.pop(
+                id(p),
+                None
+            )
+
+            # A removed fragile platform cannot
+            # remain a spring platform.
+            self.spring_platforms.discard(
+                id(p)
+            )
 
         self.frame += 1
 
@@ -164,12 +210,17 @@ class GameEngine:
 
         for p in self.platforms:
 
-            timer = self.crumble_timers.get(id(p))
+            timer = self.crumble_timers.get(
+                id(p)
+            )
 
             offset_x = 0
             offset_y = 0
 
-            # Fragile platforms shake after being stepped on.
+            # ------------------------------------------------
+            # TASK 2: Shake fragile platforms
+            # ------------------------------------------------
+
             if timer is not None:
 
                 shake = (
@@ -194,14 +245,97 @@ class GameEngine:
                 offset_y - int(self.cam_y)
             )
 
-            pygame.draw.rect(
-                self.screen,
-                PLATFORM_COLOR,
-                dr,
-                border_radius=4
-            )
+            # ------------------------------------------------
+            # TASK 3: Draw spring platforms differently
+            # ------------------------------------------------
 
-            # Show cracks while the platform is crumbling.
+            if id(p) in self.spring_platforms:
+
+                spring_color = (
+                    70,
+                    220,
+                    110
+                )
+
+                pygame.draw.rect(
+                    self.screen,
+                    spring_color,
+                    dr,
+                    border_radius=4
+                )
+
+                # Spring symbol.
+                spring_y = dr.top - 7
+
+                pygame.draw.line(
+                    self.screen,
+                    (230, 240, 120),
+                    (
+                        dr.centerx - 8,
+                        spring_y
+                    ),
+                    (
+                        dr.centerx - 4,
+                        spring_y - 5
+                    ),
+                    2
+                )
+
+                pygame.draw.line(
+                    self.screen,
+                    (230, 240, 120),
+                    (
+                        dr.centerx - 4,
+                        spring_y - 5
+                    ),
+                    (
+                        dr.centerx,
+                        spring_y
+                    ),
+                    2
+                )
+
+                pygame.draw.line(
+                    self.screen,
+                    (230, 240, 120),
+                    (
+                        dr.centerx,
+                        spring_y
+                    ),
+                    (
+                        dr.centerx + 4,
+                        spring_y - 5
+                    ),
+                    2
+                )
+
+                pygame.draw.line(
+                    self.screen,
+                    (230, 240, 120),
+                    (
+                        dr.centerx + 4,
+                        spring_y - 5
+                    ),
+                    (
+                        dr.centerx + 8,
+                        spring_y
+                    ),
+                    2
+                )
+
+            else:
+
+                pygame.draw.rect(
+                    self.screen,
+                    PLATFORM_COLOR,
+                    dr,
+                    border_radius=4
+                )
+
+            # ------------------------------------------------
+            # TASK 2: Draw cracks
+            # ------------------------------------------------
+
             if timer is not None:
 
                 crack_x = (
@@ -212,16 +346,28 @@ class GameEngine:
                 pygame.draw.line(
                     self.screen,
                     (35, 25, 20),
-                    (crack_x, dr.top + 2),
-                    (crack_x - 7, dr.bottom - 2),
+                    (
+                        crack_x,
+                        dr.top + 2
+                    ),
+                    (
+                        crack_x - 7,
+                        dr.bottom - 2
+                    ),
                     2
                 )
 
                 pygame.draw.line(
                     self.screen,
                     (35, 25, 20),
-                    (crack_x, dr.top + 2),
-                    (crack_x + 8, dr.bottom - 3),
+                    (
+                        crack_x,
+                        dr.top + 2
+                    ),
+                    (
+                        crack_x + 8,
+                        dr.bottom - 3
+                    ),
                     2
                 )
 
@@ -245,7 +391,10 @@ class GameEngine:
             (220, 200, 180)
         )
 
-        self.screen.blit(sc, (8, 10))
+        self.screen.blit(
+            sc,
+            (8, 10)
+        )
 
         if self.game_over:
             self._msg(
@@ -267,7 +416,9 @@ class GameEngine:
             pygame.SRCALPHA
         )
 
-        ov.fill((0, 0, 0, 150))
+        ov.fill(
+            (0, 0, 0, 150)
+        )
 
         self.screen.blit(
             ov,
@@ -289,7 +440,8 @@ class GameEngine:
         self.screen.blit(
             m,
             (
-                WIDTH // 2 - m.get_width() // 2,
+                WIDTH // 2
+                - m.get_width() // 2,
                 HEIGHT // 2 - 40
             )
         )
@@ -297,7 +449,8 @@ class GameEngine:
         self.screen.blit(
             s,
             (
-                WIDTH // 2 - s.get_width() // 2,
+                WIDTH // 2
+                - s.get_width() // 2,
                 HEIGHT // 2 + 20
             )
         )
