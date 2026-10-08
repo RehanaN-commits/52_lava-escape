@@ -18,6 +18,14 @@ FRAGILE_CHANCE = 0.30
 # Task 3
 SPRING_CHANCE = 0.20
 
+# Task 4
+NORMAL_LAVA_RISE = 0.4
+MAX_LAVA_RISE = 1.2
+
+SURGE_INTERVAL = 600
+SURGE_DURATION = 180
+SURGE_SPEED = 2.0
+
 
 class GameEngine:
     def __init__(self):
@@ -36,6 +44,12 @@ class GameEngine:
         self.font = pygame.font.SysFont(
             "monospace",
             24,
+            bold=True
+        )
+
+        self.small_font = pygame.font.SysFont(
+            "monospace",
+            18,
             bold=True
         )
 
@@ -59,8 +73,10 @@ class GameEngine:
         )
 
         self.cam_y = 0
+
         self.lava_y = GROUND_Y + 60
-        self.lava_rise = 0.4
+
+        self.lava_rise = NORMAL_LAVA_RISE
 
         self.score = 0
         self.game_over = False
@@ -98,6 +114,14 @@ class GameEngine:
             )
         }
 
+        # ------------------------------------------------
+        # TASK 4: Lava surge state
+        # ------------------------------------------------
+
+        self.surge_active = False
+        self.surge_timer = 0
+        self.next_surge = SURGE_INTERVAL
+
     def handle_events(self):
         for event in pygame.event.get():
 
@@ -118,7 +142,10 @@ class GameEngine:
 
         keys = pygame.key.get_pressed()
 
-        # Player returns the platform landed on.
+        # ------------------------------------------------
+        # Player update
+        # ------------------------------------------------
+
         landed = self.player.update(
             keys,
             self.platforms,
@@ -137,6 +164,49 @@ class GameEngine:
             if self.crumble_timers[id(landed)] is None:
                 self.crumble_timers[id(landed)] = CRUMBLE_FRAMES
 
+        # ------------------------------------------------
+        # TASK 4: Lava surge controller
+        # ------------------------------------------------
+
+        if not self.surge_active:
+
+            self.next_surge -= 1
+
+            if self.next_surge <= 0:
+                self.surge_active = True
+                self.surge_timer = SURGE_DURATION
+
+        else:
+
+            self.surge_timer -= 1
+
+            if self.surge_timer <= 0:
+                self.surge_active = False
+                self.next_surge = SURGE_INTERVAL
+
+        # ------------------------------------------------
+        # TASK 4: Calculate lava rise speed
+        # ------------------------------------------------
+
+        if self.surge_active:
+
+            self.lava_rise = min(
+                MAX_LAVA_RISE,
+                SURGE_SPEED
+            )
+
+        else:
+
+            self.lava_rise = min(
+                MAX_LAVA_RISE,
+                NORMAL_LAVA_RISE
+                + self.frame * 0.0003
+            )
+
+        # ------------------------------------------------
+        # Camera
+        # ------------------------------------------------
+
         target = (
             self.player.rect.centery
             - HEIGHT // 2
@@ -145,12 +215,15 @@ class GameEngine:
         if target < self.cam_y:
             self.cam_y = target
 
+        # ------------------------------------------------
+        # Move lava upward
+        # ------------------------------------------------
+
         self.lava_y -= self.lava_rise
 
-        self.lava_rise = min(
-            1.2,
-            self.lava_rise + 0.0003
-        )
+        # ------------------------------------------------
+        # Score
+        # ------------------------------------------------
 
         self.score = max(
             0,
@@ -191,13 +264,15 @@ class GameEngine:
                 None
             )
 
-            # A removed fragile platform cannot
-            # remain a spring platform.
             self.spring_platforms.discard(
                 id(p)
             )
 
         self.frame += 1
+
+        # ------------------------------------------------
+        # Game over / win
+        # ------------------------------------------------
 
         if self.player.rect.bottom >= self.lava_y:
             self.game_over = True
@@ -208,6 +283,10 @@ class GameEngine:
     def draw(self):
         self.screen.fill(BG)
 
+        # ------------------------------------------------
+        # Platforms
+        # ------------------------------------------------
+
         for p in self.platforms:
 
             timer = self.crumble_timers.get(
@@ -217,10 +296,7 @@ class GameEngine:
             offset_x = 0
             offset_y = 0
 
-            # ------------------------------------------------
             # TASK 2: Shake fragile platforms
-            # ------------------------------------------------
-
             if timer is not None:
 
                 shake = (
@@ -245,10 +321,7 @@ class GameEngine:
                 offset_y - int(self.cam_y)
             )
 
-            # ------------------------------------------------
-            # TASK 3: Draw spring platforms differently
-            # ------------------------------------------------
-
+            # TASK 3: Spring platforms
             if id(p) in self.spring_platforms:
 
                 spring_color = (
@@ -264,7 +337,6 @@ class GameEngine:
                     border_radius=4
                 )
 
-                # Spring symbol.
                 spring_y = dr.top - 7
 
                 pygame.draw.line(
@@ -332,10 +404,7 @@ class GameEngine:
                     border_radius=4
                 )
 
-            # ------------------------------------------------
-            # TASK 2: Draw cracks
-            # ------------------------------------------------
-
+            # TASK 2: Cracks
             if timer is not None:
 
                 crack_x = (
@@ -371,10 +440,18 @@ class GameEngine:
                     2
                 )
 
+        # ------------------------------------------------
+        # Player
+        # ------------------------------------------------
+
         self.player.draw(
             self.screen,
             self.cam_y
         )
+
+        # ------------------------------------------------
+        # Lava
+        # ------------------------------------------------
 
         draw_lava(
             self.screen,
@@ -385,8 +462,12 @@ class GameEngine:
             self.frame
         )
 
+        # ------------------------------------------------
+        # Height
+        # ------------------------------------------------
+
         sc = self.font.render(
-            f"Height: {self.score}m  R=Restart",
+            f"Height: {self.score}m",
             True,
             (220, 200, 180)
         )
@@ -395,6 +476,37 @@ class GameEngine:
             sc,
             (8, 10)
         )
+
+        # ------------------------------------------------
+        # TASK 4: Danger meter
+        # ------------------------------------------------
+
+        self.draw_danger_meter()
+
+        # ------------------------------------------------
+        # TASK 4: Surge warning
+        # ------------------------------------------------
+
+        if self.surge_active:
+
+            warning = self.small_font.render(
+                "!! LAVA SURGE !!",
+                True,
+                (255, 100, 70)
+            )
+
+            self.screen.blit(
+                warning,
+                (
+                    WIDTH // 2
+                    - warning.get_width() // 2,
+                    14
+                )
+            )
+
+        # ------------------------------------------------
+        # Game messages
+        # ------------------------------------------------
 
         if self.game_over:
             self._msg(
@@ -409,6 +521,89 @@ class GameEngine:
             )
 
         pygame.display.flip()
+
+    def draw_danger_meter(self):
+        """
+        Task 4:
+        Display a HUD meter representing the current
+        lava rise speed.
+        """
+
+        meter_x = WIDTH - 155
+        meter_y = 12
+
+        meter_width = 140
+        meter_height = 18
+
+        # Convert current speed to a 0-1 danger value.
+        danger = (
+            self.lava_rise / MAX_LAVA_RISE
+        )
+
+        danger = max(
+            0.0,
+            min(1.0, danger)
+        )
+
+        # Background
+        pygame.draw.rect(
+            self.screen,
+            (55, 55, 55),
+            (
+                meter_x,
+                meter_y,
+                meter_width,
+                meter_height
+            ),
+            border_radius=4
+        )
+
+        # Filled danger level
+        fill_width = int(
+            meter_width * danger
+        )
+
+        if fill_width > 0:
+
+            pygame.draw.rect(
+                self.screen,
+                (220, 70, 50),
+                (
+                    meter_x,
+                    meter_y,
+                    fill_width,
+                    meter_height
+                ),
+                border_radius=4
+            )
+
+        # Border
+        pygame.draw.rect(
+            self.screen,
+            (230, 230, 230),
+            (
+                meter_x,
+                meter_y,
+                meter_width,
+                meter_height
+            ),
+            2,
+            border_radius=4
+        )
+
+        label = self.small_font.render(
+            "DANGER",
+            True,
+            (240, 220, 200)
+        )
+
+        self.screen.blit(
+            label,
+            (
+                meter_x,
+                meter_y + 21
+            )
+        )
 
     def _msg(self, text, color):
         ov = pygame.Surface(
